@@ -242,24 +242,21 @@ def plot_figure4(u_nom, Y_traj, K_traj, Sigma_traj, N, dt):
     time = np.arange(N) * dt
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 8))
-    control_labels = ['Thrust $\\tau$', '$\\omega_x$', '$\\omega_y$', '$\\omega_z$']
-    control_units = ['[N]', '[rad/s]', '[rad/s]', '[rad/s]']
+    control_labels = ['$\\tau$', '$\\omega_x$', '$\\omega_y$', '$\\omega_z$']
 
     for i, ax in enumerate(axes.flat):
-        # Nominal control
-        ax.plot(time, u_nom[:, i], 'k-', linewidth=1.5, label='Nominal')
+        # Nominal control (black line)
+        ax.plot(time, u_nom[:, i], 'k-', linewidth=1.5)
 
-        # 3-sigma bounds from Y_k (control covariance approximation)
+        # 3-sigma bounds from Y_k (light blue shading)
         sigma_u = np.array([np.sqrt(max(Y_traj[k, i, i], 0)) for k in range(N)])
         upper = u_nom[:, i] + 3 * sigma_u
         lower = u_nom[:, i] - 3 * sigma_u
-        ax.fill_between(time, lower, upper, alpha=0.3, color='lightblue',
-                        label='$3\\sigma$ bounds')
+        ax.fill_between(time, lower, upper, alpha=0.3, color='lightblue')
 
         ax.set_xlabel('Time [s]', fontsize=11)
-        ax.set_ylabel(f'{control_labels[i]} {control_units[i]}', fontsize=11)
-        ax.set_title(f'Control effort: {control_labels[i]}', fontsize=12)
-        ax.legend(fontsize=9)
+        ax.set_ylabel(control_labels[i], fontsize=12)
+        ax.set_title(f'Control effort in {control_labels[i]}', fontsize=12)
         ax.grid(True, alpha=0.3)
 
     plt.tight_layout()

@@ -120,7 +120,7 @@ def compute_problem_size_approach2(n, p, N):
     return N * p * n
 
 
-def run_benchmark_proposed(n, p, N, max_time=300):
+def run_benchmark_proposed(n, p, N, max_time=600):
     """
     Run the proposed SDP approach and measure runtime.
     """
@@ -141,26 +141,21 @@ def run_benchmark_proposed(n, p, N, max_time=300):
     Q_list = [np.eye(n)] * N
     R_list = [np.eye(p)] * N
 
-    # Measure runtime — try SCS first (more robust), fall back to CLARABEL
-    for solver in [cp.SCS, cp.CLARABEL]:
-        start_time = time.time()
-        try:
-            Sigma_traj, U_traj, Y_traj, K_traj, cost_cov = \
-                solve_covariance_steering_sdp(
-                    A_list, B_list, D_list, Sigma_i, Sigma_f, N, Q_list, R_list,
-                    terminal_ineq=False,
-                    solver=solver, verbose=False
-                )
-            elapsed = time.time() - start_time
-            return elapsed
-        except Exception as e:
-            elapsed = time.time() - start_time
-            if elapsed > max_time:
-                return None
-            continue
-
-    print(f"    All solvers failed (n={n}, N={N})")
-    return None
+    # Use SCS for all cases (more robust for SDPs)
+    start_time = time.time()
+    try:
+        Sigma_traj, U_traj, Y_traj, K_traj, cost_cov = \
+            solve_covariance_steering_sdp(
+                A_list, B_list, D_list, Sigma_i, Sigma_f, N, Q_list, R_list,
+                terminal_ineq=False,
+                solver=cp.SCS, verbose=False
+            )
+        elapsed = time.time() - start_time
+        return elapsed
+    except Exception as e:
+        elapsed = time.time() - start_time
+        print(f"    SCS failed (n={n}, N={N}): {e}")
+        return None
 
 
 def run_table1():
