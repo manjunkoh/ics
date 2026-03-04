@@ -120,11 +120,18 @@ def compute_problem_size_approach2(n, p, N):
     return N * p * n
 
 
-def run_benchmark_proposed(n, p, N, max_time=600):
+def run_benchmark_proposed(n, p, N, max_time=300):
     """
     Run the proposed SDP approach and measure runtime.
+    Returns runtime in seconds, or None if failed.
     """
     q = n  # noise channels = state dimensions (as stated in paper)
+
+    # Skip very large problems that will exceed memory
+    total_vars = compute_problem_size_proposed(n, p, N)
+    if total_vars > 20000:
+        print(f"    Skipping (problem size {total_vars} too large for open-source solvers)")
+        return None
 
     # Generate random system
     A, B, D = generate_random_system(n, p, q)
@@ -162,6 +169,8 @@ def run_table1():
     """
     Table I: Runtime comparison for varying state space size.
     n = 4, 8, 16, 32, fixed N = 32.
+    Note: n=32 may exceed available memory with open-source solvers
+    (paper uses MOSEK commercial solver).
     """
     print("\n" + "=" * 70)
     print("Table I: Runtime Comparison for Varying State Space Size")
