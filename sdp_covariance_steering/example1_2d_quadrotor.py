@@ -24,20 +24,20 @@ def build_triple_integrator_2d(dt, N):
     Build discrete-time triple integrator for 2D motion.
 
     State: [pos_x, pos_y, vel_x, vel_y, acc_x, acc_y] (6 states)
-    Input: [u_x, u_y] (2 inputs, change in acceleration / jerk * dt)
+    Input: [u_x, u_y] (2 inputs representing jerk)
 
     Euler discretization:
         pos_{k+1} = pos_k + dt * vel_k
         vel_{k+1} = vel_k + dt * acc_k
-        acc_{k+1} = acc_k + u_k
+        acc_{k+1} = acc_k + dt * u_k
 
     A = [I_2,    dt*I_2,  0_2  ]
         [0_2,    I_2,     dt*I_2]
         [0_2,    0_2,     I_2   ]
 
-    B = [0_2]
-        [0_2]
-        [I_2]
+    B = [0_2   ]
+        [0_2   ]
+        [dt*I_2]
 
     D = 0.1 * I_6
     """
@@ -55,7 +55,7 @@ def build_triple_integrator_2d(dt, N):
     B = np.block([
         [Z2],
         [Z2],
-        [I2]
+        [dt * I2]
     ])
 
     D = 0.1 * np.eye(n)
@@ -110,15 +110,16 @@ def run_example1():
     mu_i = np.array([20.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     mu_f = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-    # Cost matrices
-    Q_list = [np.eye(n)] * N
+    # Cost matrices (not specified in paper; using minimum control energy)
+    Q_list = [np.zeros((n, n))] * N
     R_list = [np.eye(p)] * N
 
     # Waypoints at k=20 and k=40
     # Position components (indices 0, 1) constrained
+    # (read from Figure 2 in paper)
     waypoints = {
-        20: ([0, 1], [14.0, 5.0]),
-        40: ([0, 1], [6.0, -4.0]),
+        20: ([0, 1], [14.0, 4.0]),
+        40: ([0, 1], [6.0, -3.0]),
     }
 
     # Chance constraint parameters

@@ -37,9 +37,11 @@ def main():
     run_example1()
 
     # Figures 3 & 4: Example 2 - Nonlinear quadrotor
+    # Use --fast for SCS (dt=0.05, N=100), default uses paper params (dt=0.01, N=500)
     print("\n[3/4] Running Example 2 (Nonlinear Quadrotor)...")
     from example2_nonlinear_quadrotor import run_example2
-    run_example2()
+    fast = '--fast' in sys.argv
+    run_example2(fast=fast)
 
     # Tables I & II: Runtime comparison
     print("\n[4/4] Running Runtime Comparison...")

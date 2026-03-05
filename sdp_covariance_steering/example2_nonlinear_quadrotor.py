@@ -10,7 +10,7 @@ for a nonlinear quadrotor using covariance steering on the linearized
 deviation dynamics.
 
 Paper parameters: dt=0.01, N=500 (solved with MOSEK).
-We use dt=0.05, N=100 for equivalent results with open-source solvers.
+Use --fast flag for reduced resolution (dt=0.05, N=100) with SCS.
 """
 
 import numpy as np
@@ -28,30 +28,39 @@ from quadrotor_dynamics import (
 )
 
 
-def run_example2():
+def run_example2(fast=False):
     """Run Example 2: Nonlinear quadrotor covariance steering."""
     print("=" * 60)
     print("Example 2: Nonlinear Quadrotor Covariance Steering")
     print("=" * 60)
 
     # Parameters
-    # Paper: dt=0.01, N=500. We use dt=0.05, N=100 (same total time 5s)
-    # for tractability with open-source SDP solvers
-    dt = 0.05
-    N = 100
+    if fast:
+        print("  Running in FAST mode (dt=0.05, N=100)")
+        dt = 0.05
+        N = 100
+        tube_start = 10  # k >= 50 in paper (N=500), scaled to N=100
+    else:
+        print("  Running with paper parameters (dt=0.01, N=500)")
+        dt = 0.01
+        N = 500
+        tube_start = 50  # paper: k >= 50
+
     n = 9   # state dimension (r, v, q)
     p = 4   # input dimension (τ, ω)
+    T = N * dt  # total time
 
-    # Boundary conditions for nominal trajectory
+    # Boundary conditions for nominal trajectory (Eq. 23)
     pos_0 = np.array([0.0, 0.5, 0.0])
     pos_N = np.array([0.0, -0.5, 0.0])
 
-    # Four position waypoints (scaled to N=100)
+    # Four position waypoints (evenly spaced at 1s intervals)
+    wp_steps = [N // 5, 2 * N // 5, 3 * N // 5, 4 * N // 5]
     waypoints_nom = {
-        20: np.array([0.3, 0.3, 0.15]),
-        40: np.array([0.0, 0.0, 0.3]),
-        60: np.array([-0.3, -0.3, 0.15]),
-        80: np.array([0.0, -0.4, 0.0]),
+        wp_steps[0]: np.array([0.3, 0.3, 0.15]),
+        wp_steps[1]: np.array([0.0, 0.0, 0.3]),
+        wp_steps[2]: np.array([-0.3, -0.3, 0.15]),
+        wp_steps[3]: np.array([0.0, -0.4, 0.0]),
     }
 
     # Step 1: Generate nominal trajectory using triple integrator
@@ -74,15 +83,9 @@ def run_example2():
 
     for k in range(N):
         Ak, Bk, Dk = compute_jacobians_numerical(x_nom[k], u_nom[k], dt)
-
-        # Check A_k invertibility (required by the paper)
-        det_Ak = np.linalg.det(Ak)
-        if abs(det_Ak) < 1e-10:
-            print(f"  Warning: A_{k} near-singular (det={det_Ak:.2e})")
-
         A_list.append(Ak)
         B_list.append(Bk)
-        # Add D̃ for discretization/linearization errors
+        # D_k from linearization + D̃ for discretization/linearization errors
         D_tilde = 0.001 * np.eye(n, 6)
         D_list.append(Dk + D_tilde)
 
@@ -91,11 +94,11 @@ def run_example2():
     # Step 4: Set up covariance steering problem
     print("Step 4: Setting up covariance steering problem...")
 
-    # Cost matrices (paper: Q_k = 10*I, R_k = 0.1*I)
+    # Cost matrices (paper: Q_k = 10*I_9, R_k = 0.1*I_4)
     Q_list = [10.0 * np.eye(n)] * N
     R_list = [0.1 * np.eye(p)] * N
 
-    # Boundary covariances
+    # Boundary covariances (paper Eq.)
     Sigma_i = np.block([
         [1e-2 * np.eye(3), np.zeros((3, 6))],
         [np.zeros((6, 3)), 1e-3 * np.eye(6)]
@@ -105,9 +108,7 @@ def run_example2():
         [np.zeros((6, 3)), 1e-3 * np.eye(6)]
     ])
 
-    # Covariance tube constraint: position covariance <= 2e-3*I_3 for k >= 10
-    # (Paper: k >= 50 with N=500, equivalent to k >= 10 with N=100)
-    tube_start = 10
+    # Covariance tube constraint: position covariance <= 2e-3*I_3 for k >= tube_start
     covariance_constraints = [{
         'k': list(range(tube_start, N + 1)),
         'indices': [0, 1, 2],
@@ -121,24 +122,36 @@ def run_example2():
 
     import cvxpy as cp
 
-    # Try solving with SCS (better for large-scale SDPs)
+    # Try MOSEK first, then SCS
+    solver = cp.MOSEK
+    solver_name = "MOSEK"
+    try:
+        cp.installed_solvers()
+        if 'MOSEK' not in cp.installed_solvers():
+            raise RuntimeError("MOSEK not available")
+    except Exception:
+        solver = cp.SCS
+        solver_name = "SCS"
+
+    print(f"  Using solver: {solver_name}")
+
     try:
         Sigma_traj, U_traj, Y_traj, K_traj, cost_cov = \
             solve_covariance_steering_sdp(
                 A_list, B_list, D_list, Sigma_i, Sigma_f, N, Q_list, R_list,
                 terminal_ineq=False,
                 covariance_constraints=covariance_constraints,
-                solver=cp.SCS, verbose=False
+                solver=solver, verbose=False
             )
     except Exception as e:
-        print(f"  SCS with tube constraints failed: {e}")
+        print(f"  {solver_name} with tube constraints failed: {e}")
         print("  Retrying without tube constraints...")
         Sigma_traj, U_traj, Y_traj, K_traj, cost_cov = \
             solve_covariance_steering_sdp(
                 A_list, B_list, D_list, Sigma_i, Sigma_f, N, Q_list, R_list,
                 terminal_ineq=False,
                 covariance_constraints=None,
-                solver=cp.SCS, verbose=False
+                solver=solver, verbose=False
             )
 
     print(f"  Covariance cost: {cost_cov:.4f}")
@@ -180,7 +193,7 @@ def plot_covariance_ellipsoid_3d(ax, center, cov_3x3, n_std=3.0,
 def plot_figure3(x_nom, Sigma_traj, N, dt):
     """
     Replicate Figure 3: Uncertainty control around nominal trajectory.
-    Left panel: Trajectory only. Right panel: With covariance ellipsoids.
+    Paper shows: Left = trajectory only, Right = with covariance ellipsoids.
     """
     fig = plt.figure(figsize=(16, 7))
 
@@ -202,7 +215,9 @@ def plot_figure3(x_nom, Sigma_traj, N, dt):
              'k-', linewidth=2, label='Nominal')
 
     # Plot 3-sigma position covariance ellipsoids at selected steps
-    ellipsoid_steps = list(range(0, N + 1, 5))
+    n_ellipsoids = min(20, N // 5)
+    step = max(1, N // n_ellipsoids)
+    ellipsoid_steps = list(range(0, N + 1, step))
     if N not in ellipsoid_steps:
         ellipsoid_steps.append(N)
 
@@ -228,7 +243,10 @@ def plot_figure3(x_nom, Sigma_traj, N, dt):
     ax2.set_title('Covariance Steering around nominal trajectory', fontsize=13)
     ax2.view_init(elev=25, azim=-60)
 
-    plt.tight_layout()
+    fig.text(0.5, 0.01, 'Fig. 3. Uncertainty control around nominal trajectory.',
+             fontsize=10, style='italic', ha='center')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 1])
     plt.savefig('figures/figure3_quadrotor_trajectory.png', dpi=300,
                 bbox_inches='tight')
     plt.close()
@@ -238,11 +256,15 @@ def plot_figure3(x_nom, Sigma_traj, N, dt):
 def plot_figure4(u_nom, Y_traj, K_traj, Sigma_traj, N, dt):
     """
     Replicate Figure 4: Required control effort.
+    Paper layout: 2x2 grid with τ, ω_x, ω_y, ω_z.
+    Each subplot: black line = nominal, light blue = 3-sigma bounds.
     """
     time = np.arange(N) * dt
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 8))
     control_labels = ['$\\tau$', '$\\omega_x$', '$\\omega_y$', '$\\omega_z$']
+    subplot_titles = ['Control effort in $\\tau$', 'Control effort in $\\omega_x$',
+                      'Control effort in $\\omega_y$', 'Control effort in $\\omega_z$']
 
     for i, ax in enumerate(axes.flat):
         # Nominal control (black line)
@@ -256,10 +278,13 @@ def plot_figure4(u_nom, Y_traj, K_traj, Sigma_traj, N, dt):
 
         ax.set_xlabel('Time [s]', fontsize=11)
         ax.set_ylabel(control_labels[i], fontsize=12)
-        ax.set_title(f'Control effort in {control_labels[i]}', fontsize=12)
+        ax.set_title(subplot_titles[i], fontsize=12)
         ax.grid(True, alpha=0.3)
 
-    plt.tight_layout()
+    fig.text(0.5, 0.01, 'Fig. 4. Required control effort.',
+             fontsize=10, style='italic', ha='center')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 1])
     plt.savefig('figures/figure4_quadrotor_control.png', dpi=300,
                 bbox_inches='tight')
     plt.close()
@@ -267,4 +292,5 @@ def plot_figure4(u_nom, Y_traj, K_traj, Sigma_traj, N, dt):
 
 
 if __name__ == '__main__':
-    run_example2()
+    fast = '--fast' in sys.argv
+    run_example2(fast=fast)

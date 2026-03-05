@@ -17,7 +17,8 @@ from scipy.stats import norm
 
 
 def solve_mean_steering(A_list, B_list, mu_i, mu_f, N, Q_list, R_list,
-                        waypoints=None):
+                        waypoints=None,
+                        alpha_u_list=None, beta_u_list=None):
     """
     Solve the mean steering problem.
 
@@ -70,6 +71,12 @@ def solve_mean_steering(A_list, B_list, mu_i, mu_f, N, Q_list, R_list,
         for k_wp, (indices, values) in waypoints.items():
             for idx, val in zip(indices, values):
                 constraints.append(mu[k_wp][idx] == val)
+
+    # Control bounds (necessary when chance constraints couple mean and cov)
+    if alpha_u_list is not None and beta_u_list is not None:
+        for k in range(N):
+            for alpha_u, beta_u in zip(alpha_u_list, beta_u_list):
+                constraints.append(alpha_u @ v[k] <= beta_u)
 
     # Cost
     cost = 0
@@ -386,9 +393,10 @@ def solve_full_cs_problem(A_list, B_list, D_list, Sigma_i, Sigma_f,
         'mu_traj', 'v_traj', 'Sigma_traj', 'U_traj', 'Y_traj', 'K_traj',
         'cost_mean', 'cost_cov', 'cost_total'
     """
-    # Step 1: Solve mean steering
+    # Step 1: Solve mean steering (with control bounds if chance constraints present)
     mu_traj, v_traj, cost_mean = solve_mean_steering(
-        A_list, B_list, mu_i, mu_f, N, Q_list, R_list, waypoints=waypoints
+        A_list, B_list, mu_i, mu_f, N, Q_list, R_list, waypoints=waypoints,
+        alpha_u_list=alpha_u_list, beta_u_list=beta_u_list
     )
 
     # Step 2: Build chance constraints if provided
