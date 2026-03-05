@@ -72,10 +72,10 @@ def run_example2(fast=False):
     # back through center → northwest to left lobe → south → end.
     wp_steps = [N // 5, 2 * N // 5, 3 * N // 5, 4 * N // 5]
     waypoints_nom = {
-        wp_steps[0]: np.array([3.0, 1.0, 1.0]),     # upper right lobe
-        wp_steps[1]: np.array([1.5, -1.0, 0.5]),    # lower right, crossing
-        wp_steps[2]: np.array([-3.0, 0.5, 1.0]),    # upper left lobe
-        wp_steps[3]: np.array([-1.0, -0.8, 0.0]),   # lower left, approaching end
+        wp_steps[0]: np.array([3.0, 1.5, 1.0]),     # upper right lobe
+        wp_steps[1]: np.array([3.0, -1.5, 0.5]),    # lower right lobe
+        wp_steps[2]: np.array([-3.0, 1.5, 1.0]),    # upper left lobe
+        wp_steps[3]: np.array([-3.0, -1.5, 0.0]),   # lower left lobe
     }
 
     # Step 1: Generate nominal trajectory using triple integrator
@@ -137,37 +137,51 @@ def run_example2(fast=False):
 
     import cvxpy as cp
 
-    # Try MOSEK first, then SCS
-    solver = cp.MOSEK
-    solver_name = "MOSEK"
-    try:
-        cp.installed_solvers()
-        if 'MOSEK' not in cp.installed_solvers():
-            raise RuntimeError("MOSEK not available")
-    except Exception:
-        solver = cp.SCS
-        solver_name = "SCS"
+    # Build solver priority list
+    has_mosek = 'MOSEK' in cp.installed_solvers()
+    solvers_to_try = []
+    if has_mosek:
+        solvers_to_try.append(('MOSEK', cp.MOSEK))
+    solvers_to_try.append(('SCS', cp.SCS))
+    solvers_to_try.append(('CLARABEL', cp.CLARABEL))
 
-    print(f"  Using solver: {solver_name}")
+    # Try progressively relaxed configurations:
+    # 1. With tube constraints, equality terminal (paper setup)
+    # 2. Without tube constraints, equality terminal
+    # 3. Without tube constraints, inequality terminal (Sigma_N <= Sigma_f)
+    configs = [
+        {'tube': True, 'ineq': False, 'label': 'tube + equality terminal'},
+        {'tube': False, 'ineq': False, 'label': 'no tube + equality terminal'},
+        {'tube': False, 'ineq': True, 'label': 'no tube + inequality terminal'},
+    ]
 
-    try:
-        Sigma_traj, U_traj, Y_traj, K_traj, cost_cov = \
-            solve_covariance_steering_sdp(
-                A_list, B_list, D_list, Sigma_i, Sigma_f, N, Q_list, R_list,
-                terminal_ineq=False,
-                covariance_constraints=covariance_constraints,
-                solver=solver, verbose=False
-            )
-    except Exception as e:
-        print(f"  {solver_name} with tube constraints failed: {e}")
-        print("  Retrying without tube constraints...")
-        Sigma_traj, U_traj, Y_traj, K_traj, cost_cov = \
-            solve_covariance_steering_sdp(
-                A_list, B_list, D_list, Sigma_i, Sigma_f, N, Q_list, R_list,
-                terminal_ineq=False,
-                covariance_constraints=None,
-                solver=solver, verbose=False
-            )
+    solved = False
+    for solver_name, solver in solvers_to_try:
+        if solved:
+            break
+        for cfg in configs:
+            if solved:
+                break
+            cov_cc = covariance_constraints if cfg['tube'] else None
+            desc = f"{solver_name}, {cfg['label']}"
+            print(f"  Trying: {desc}...")
+            try:
+                Sigma_traj, U_traj, Y_traj, K_traj, cost_cov = \
+                    solve_covariance_steering_sdp(
+                        A_list, B_list, D_list, Sigma_i, Sigma_f, N,
+                        Q_list, R_list,
+                        terminal_ineq=cfg['ineq'],
+                        covariance_constraints=cov_cc,
+                        solver=solver, verbose=False
+                    )
+                print(f"  Solved with: {desc}")
+                solved = True
+            except Exception as e:
+                print(f"  Failed ({desc}): {e}")
+
+    if not solved:
+        raise RuntimeError("All solver configurations failed. "
+                           "The problem may be infeasible with these parameters.")
 
     print(f"  Covariance cost: {cost_cov:.4f}")
 
