@@ -16,7 +16,7 @@ Use --fast flag for quick testing (dt=0.05, N=100).
 
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.patches import Ellipse
 import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
@@ -201,58 +201,73 @@ def plot_covariance_ellipsoid_3d(ax, center, cov_3x3, n_std=3.0,
                     linewidth=0)
 
 
+def plot_confidence_ellipse_2d(ax, mu, cov_2x2, n_std=3.0, **kwargs):
+    """Plot a 2D confidence ellipse given mean and 2x2 covariance."""
+    from matplotlib.patches import Ellipse
+    eigenvalues, eigenvectors = np.linalg.eigh(cov_2x2)
+    eigenvalues = np.maximum(eigenvalues, 0)
+    angle = np.degrees(np.arctan2(eigenvectors[1, 1], eigenvectors[0, 1]))
+    width = 2 * n_std * np.sqrt(eigenvalues[1])
+    height = 2 * n_std * np.sqrt(eigenvalues[0])
+    ellipse = Ellipse(xy=(mu[0], mu[1]), width=width, height=height,
+                      angle=angle, **kwargs)
+    ax.add_patch(ellipse)
+    return ellipse
+
+
 def plot_figure3(x_nom, Sigma_traj, N, dt):
     """
-    Replicate Figure 3: Uncertainty control around nominal trajectory.
-    Paper shows: Left = trajectory only, Right = with covariance ellipsoids.
+    Replicate Figure 3: Covariance Steering around nominal trajectory.
+    Paper shows a 2D x-y projection with covariance ellipses.
     """
-    fig = plt.figure(figsize=(16, 7))
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
 
-    # ---- Left panel: Nominal trajectory ----
-    ax1 = fig.add_subplot(121, projection='3d')
-    ax1.plot(x_nom[:, 0], x_nom[:, 1], x_nom[:, 2],
-             'b-', linewidth=2)
-    ax1.scatter(*x_nom[0, :3], color='red', s=60, zorder=5)
-    ax1.scatter(*x_nom[N, :3], color='red', s=60, zorder=5)
-    ax1.set_xlabel('$r_x$ [m]', fontsize=11)
-    ax1.set_ylabel('$r_y$ [m]', fontsize=11)
-    ax1.set_zlabel('$r_z$ [m]', fontsize=11)
-    ax1.set_title('Trajectory', fontsize=13)
-    ax1.view_init(elev=25, azim=-60)
+    # Plot 3-sigma position covariance ellipses at selected steps (x-y plane)
+    n_ellipses = min(25, N // 5)
+    step = max(1, N // n_ellipses)
+    ellipse_steps = list(range(0, N + 1, step))
+    if N not in ellipse_steps:
+        ellipse_steps.append(N)
 
-    # ---- Right panel: Trajectory with covariance ellipsoids ----
-    ax2 = fig.add_subplot(122, projection='3d')
-    ax2.plot(x_nom[:, 0], x_nom[:, 1], x_nom[:, 2],
-             'k-', linewidth=2, label='Nominal')
+    # Blue ellipses for intermediate steps
+    for k in ellipse_steps:
+        if k != 0 and k != N:
+            center = x_nom[k, :2]  # r_x, r_y
+            cov_xy = Sigma_traj[k, :2, :2]
+            plot_confidence_ellipse_2d(ax, center, cov_xy, n_std=3.0,
+                                       facecolor='blue', alpha=0.15,
+                                       edgecolor='blue', linewidth=0.5)
 
-    # Plot 3-sigma position covariance ellipsoids at selected steps
-    n_ellipsoids = min(20, N // 5)
-    step = max(1, N // n_ellipsoids)
-    ellipsoid_steps = list(range(0, N + 1, step))
-    if N not in ellipsoid_steps:
-        ellipsoid_steps.append(N)
+    # Red ellipses for initial and terminal
+    for k in [0, N]:
+        center = x_nom[k, :2]
+        cov_xy = Sigma_traj[k, :2, :2]
+        plot_confidence_ellipse_2d(ax, center, cov_xy, n_std=3.0,
+                                   facecolor='red', alpha=0.3,
+                                   edgecolor='red', linewidth=1.5)
 
-    for k in ellipsoid_steps:
-        center = x_nom[k, :3]
-        cov_pos = Sigma_traj[k, :3, :3]
+    # Plot nominal trajectory (black line) on top
+    ax.plot(x_nom[:, 0], x_nom[:, 1], 'k-', linewidth=2)
 
-        if k == 0 or k == N:
-            color = 'red'
-            alpha = 0.4
-        else:
-            color = 'blue'
-            alpha = 0.15
+    # Mark start and end
+    ax.plot(x_nom[0, 0], x_nom[0, 1], 'ro', markersize=8, zorder=5)
+    ax.plot(x_nom[N, 0], x_nom[N, 1], 'ro', markersize=8, zorder=5)
 
-        plot_covariance_ellipsoid_3d(ax2, center, cov_pos, n_std=3.0,
-                                     color=color, alpha=alpha)
+    # Labels
+    ax.annotate('initial covariance', xy=(x_nom[0, 0], x_nom[0, 1]),
+                xytext=(x_nom[0, 0] + 0.1, x_nom[0, 1] + 0.15),
+                fontsize=10, ha='left',
+                arrowprops=dict(arrowstyle='->', color='black'))
+    ax.annotate('terminal covariance', xy=(x_nom[N, 0], x_nom[N, 1]),
+                xytext=(x_nom[N, 0] + 0.1, x_nom[N, 1] - 0.15),
+                fontsize=10, ha='left',
+                arrowprops=dict(arrowstyle='->', color='black'))
 
-    ax2.scatter(*x_nom[0, :3], color='red', s=60, zorder=5)
-    ax2.scatter(*x_nom[N, :3], color='red', s=60, zorder=5)
-    ax2.set_xlabel('$r_x$ [m]', fontsize=11)
-    ax2.set_ylabel('$r_y$ [m]', fontsize=11)
-    ax2.set_zlabel('$r_z$ [m]', fontsize=11)
-    ax2.set_title('Covariance Steering around nominal trajectory', fontsize=13)
-    ax2.view_init(elev=25, azim=-60)
+    ax.set_xlabel('$x$ [m]', fontsize=12)
+    ax.set_ylabel('$y$ [m]', fontsize=12)
+    ax.set_title('Covariance Steering around nominal trajectory', fontsize=13)
+    ax.set_aspect('equal')
+    ax.grid(True, alpha=0.3)
 
     fig.text(0.5, 0.01, 'Fig. 3. Uncertainty control around nominal trajectory.',
              fontsize=10, style='italic', ha='center')

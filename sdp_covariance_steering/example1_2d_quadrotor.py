@@ -110,8 +110,11 @@ def run_example1():
     mu_i = np.array([20.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     mu_f = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-    # Cost matrices (not specified in paper; using minimum control energy)
-    Q_list = [np.zeros((n, n))] * N
+    # Cost matrices: Q penalizes covariance growth (tr(Q Sigma_k)),
+    # R penalizes control covariance (tr(R Y_k)).
+    # Paper uses the cost J_Sigma = sum tr(Q_k Sigma_k) + tr(R_k Y_k).
+    # Q=I keeps covariance bounded; with Q=0 covariance grows freely mid-horizon.
+    Q_list = [np.eye(n)] * N
     R_list = [np.eye(p)] * N
 
     # Waypoints at k=20 and k=40
