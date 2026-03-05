@@ -9,8 +9,9 @@ Controls the uncertainty around an aggressive reference trajectory
 for a nonlinear quadrotor using covariance steering on the linearized
 deviation dynamics.
 
-Paper parameters: dt=0.01, N=500 (solved with MOSEK).
-Use --fast flag for reduced resolution (dt=0.05, N=100) with SCS.
+Paper parameters: dt=0.01, N=500 (requires MOSEK).
+Without MOSEK, uses dt=0.02, N=250 with SCS.
+Use --fast flag for quick testing (dt=0.05, N=100).
 """
 
 import numpy as np
@@ -35,16 +36,26 @@ def run_example2(fast=False):
     print("=" * 60)
 
     # Parameters
+    # Check for MOSEK availability
+    import cvxpy as cp
+    has_mosek = 'MOSEK' in cp.installed_solvers()
+
     if fast:
         print("  Running in FAST mode (dt=0.05, N=100)")
         dt = 0.05
         N = 100
-        tube_start = 10  # k >= 50 in paper (N=500), scaled to N=100
-    else:
-        print("  Running with paper parameters (dt=0.01, N=500)")
+        tube_start = 10  # k >= 50 in paper (N=500), scaled
+    elif has_mosek:
+        print("  Running with paper parameters (dt=0.01, N=500, MOSEK)")
         dt = 0.01
         N = 500
         tube_start = 50  # paper: k >= 50
+    else:
+        print("  MOSEK not available. Using dt=0.02, N=250 with SCS.")
+        print("  (Paper uses dt=0.01, N=500 with MOSEK)")
+        dt = 0.02
+        N = 250
+        tube_start = 25  # k >= 50 for N=500, scaled
 
     n = 9   # state dimension (r, v, q)
     p = 4   # input dimension (τ, ω)
