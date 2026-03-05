@@ -66,12 +66,16 @@ def run_example2(fast=False):
     pos_N = np.array([0.0, -0.5, 0.0])
 
     # Four position waypoints (evenly spaced at 1s intervals)
+    # Estimated from paper Figure 3: figure-8/infinity sign pattern
+    # spanning x in [-4, 4], y in [-2, 2] with altitude variations.
+    # The trajectory goes: start → northeast to right lobe → south →
+    # back through center → northwest to left lobe → south → end.
     wp_steps = [N // 5, 2 * N // 5, 3 * N // 5, 4 * N // 5]
     waypoints_nom = {
-        wp_steps[0]: np.array([0.3, 0.3, 0.15]),
-        wp_steps[1]: np.array([0.0, 0.0, 0.3]),
-        wp_steps[2]: np.array([-0.3, -0.3, 0.15]),
-        wp_steps[3]: np.array([0.0, -0.4, 0.0]),
+        wp_steps[0]: np.array([3.0, 1.0, 1.0]),     # upper right lobe
+        wp_steps[1]: np.array([1.5, -1.0, 0.5]),    # lower right, crossing
+        wp_steps[2]: np.array([-3.0, 0.5, 1.0]),    # upper left lobe
+        wp_steps[3]: np.array([-1.0, -0.8, 0.0]),   # lower left, approaching end
     }
 
     # Step 1: Generate nominal trajectory using triple integrator
