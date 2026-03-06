@@ -113,9 +113,10 @@ def run_example1():
     # Cost matrices: Q penalizes covariance growth (tr(Q Sigma_k)),
     # R penalizes control covariance (tr(R Y_k)).
     # Paper uses the cost J_Sigma = sum tr(Q_k Sigma_k) + tr(R_k Y_k).
-    # Q=I keeps covariance bounded; with Q=0 covariance grows freely mid-horizon.
-    Q_list = [np.eye(n)] * N
-    R_list = [np.eye(p)] * N
+    # High Q/R ratio (matching Example 2: Q=10, R=0.1) keeps covariance
+    # well-bounded while allowing sufficient control authority.
+    Q_list = [10.0 * np.eye(n)] * N
+    R_list = [0.1 * np.eye(p)] * N
 
     # Waypoints at k=20 and k=40
     # Position components (indices 0, 1) constrained

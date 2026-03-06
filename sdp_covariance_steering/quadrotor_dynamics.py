@@ -271,6 +271,12 @@ def compute_nominal_quadrotor_state_and_control(pos_traj, dt):
             theta_next = x_nom[k + 1, 8]
             phi_dot = (phi_next - phi_k) / dt
             theta_dot = (theta_next - theta_k) / dt
+        elif k > 0:
+            # Use backward difference at last step to avoid spike
+            phi_prev = x_nom[k - 1, 7]
+            theta_prev = x_nom[k - 1, 8]
+            phi_dot = (phi_k - phi_prev) / dt
+            theta_dot = (theta_k - theta_prev) / dt
         else:
             phi_dot = 0
             theta_dot = 0

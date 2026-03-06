@@ -241,7 +241,8 @@ def plot_figure3(x_nom, Sigma_traj, N, dt):
     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
 
     # Plot 3-sigma position covariance ellipses at selected steps (x-y plane)
-    n_ellipses = min(25, N // 5)
+    # Use higher density to match paper's densely packed ellipses
+    n_ellipses = min(50, N // 2)
     step = max(1, N // n_ellipses)
     ellipse_steps = list(range(0, N + 1, step))
     if N not in ellipse_steps:
